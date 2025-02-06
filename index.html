@@ -1,0 +1,122 @@
+import telebot
+from telebot import types
+import smtplib
+from email.mime.text import MIMEText
+
+# Replace with your actual bot token from BotFather
+BOT_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN'
+
+# Email setup for withdrawal requests and support
+EMAIL_ADDRESS = 'youremail@example.com'  # Replace with your email
+EMAIL_PASSWORD = 'yourpassword'  # Replace with your email password
+SUPPORT_EMAIL = 'support@example.com'  # Support email for user inquiries
+
+bot = telebot.TeleBot(BOT_TOKEN)
+
+# Dictionary to store user data
+users_data = {}
+
+# Function to send email for withdrawal requests
+def send_email(subject, message, recipient=EMAIL_ADDRESS):
+    msg = MIMEText(message)
+    msg['Subject'] = subject
+    msg['From'] = EMAIL_ADDRESS
+    msg['To'] = recipient
+
+    try:
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_ADDRESS, recipient, msg.as_string())
+        print("Email sent successfully!")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+
+# /start command to greet the user
+@bot.message_handler(commands=['start'])
+def start(message):
+    chat_id = message.chat.id
+    if chat_id not in users_data:
+        users_data[chat_id] = {'balance': 0, 'mining_speed': 1, 'referrals': 0}
+
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add('🔴 Start Mining', '💰 Buy Mining Speed')
+    markup.add('📤 Withdraw', '👥 Invite Friends')
+    markup.add('🎥 Get Free Mining Speed', '📞 Support')
+
+    bot.send_message(chat_id, "🔴 **Welcome to TRX Mining Bot!**\nStart mining and earn TRX now!", parse_mode='Markdown', reply_markup=markup)
+
+# Mining process
+@bot.message_handler(func=lambda message: message.text == '🔴 Start Mining')
+def start_mining(message):
+    chat_id = message.chat.id
+    users_data[chat_id]['balance'] += users_data[chat_id]['mining_speed']
+
+    bot.send_message(chat_id, f"🔴 Mining started!\n💰 **Your balance:** {users_data[chat_id]['balance']} TRX", parse_mode='Markdown')
+    bot.send_message(chat_id, "💎 Mining... ⛏️\n🔴 [TRX Coin Animation](https://example.com/animation.gif)", parse_mode='Markdown')
+
+# Buy mining speed
+@bot.message_handler(func=lambda message: message.text == '💰 Buy Mining Speed')
+def buy_mining_speed(message):
+    chat_id = message.chat.id
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton('1 USDT for +1 Speed', callback_data='buy_1'),
+               types.InlineKeyboardButton('5 USDT for +5 Speed', callback_data='buy_5'))
+
+    bot.send_message(chat_id, "💰 **Choose your mining speed:**", parse_mode='Markdown', reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('buy_'))
+def handle_purchase(call):
+    speed = int(call.data.split('_')[1])
+    chat_id = call.message.chat.id
+    users_data[chat_id]['mining_speed'] += speed
+
+    bot.answer_callback_query(call.id, f"✅ Successfully purchased +{speed} mining speed!")
+    bot.send_message(chat_id, f"🚀 **New mining speed:** {users_data[chat_id]['mining_speed']} TRX/s", parse_mode='Markdown')
+
+# Withdraw funds
+@bot.message_handler(func=lambda message: message.text == '📤 Withdraw')
+def withdraw(message):
+    chat_id = message.chat.id
+    balance = users_data[chat_id]['balance']
+
+    if balance >= 50:
+        bot.send_message(chat_id, "📤 **Enter your TRX wallet address to withdraw:**", parse_mode='Markdown')
+        bot.register_next_step_handler(message, process_withdrawal)
+    else:
+        bot.send_message(chat_id, f"❌ **Minimum withdrawal is 50 TRX.**\n💰 **Your balance:** {balance} TRX", parse_mode='Markdown')
+
+def process_withdrawal(message):
+    wallet_address = message.text
+    chat_id = message.chat.id
+    balance = users_data[chat_id]['balance']
+
+    email_subject = "TRX Withdrawal Request"
+    email_body = f"User ID: {chat_id}\nRequested withdrawal of {balance} TRX to wallet: {wallet_address}"
+    send_email(email_subject, email_body)
+
+    bot.send_message(chat_id, f"✅ **Withdrawal request sent!**\n💰 You will receive {balance} TRX soon.", parse_mode='Markdown')
+
+# Invite friends
+@bot.message_handler(func=lambda message: message.text == '👥 Invite Friends')
+def invite_friends(message):
+    chat_id = message.chat.id
+    referral_link = f"https://t.me/YOUR_BOT_USERNAME?start={chat_id}"
+
+    bot.send_message(chat_id, f"👥 **Invite friends and earn rewards!**\nShare this link: {referral_link}", parse_mode='Markdown')
+
+# Free mining speed (ads)
+@bot.message_handler(func=lambda message: message.text == '🎥 Get Free Mining Speed')
+def free_mining_speed(message):
+    chat_id = message.chat.id
+    users_data[chat_id]['mining_speed'] += 1
+
+    bot.send_message(chat_id, "🎥 **Thanks for watching the ad!**\n🚀 You've earned +1 mining speed.", parse_mode='Markdown')
+
+# Support portal
+@bot.message_handler(func=lambda message: message.text == '📞 Support')
+def support(message):
+    chat_id = message.chat.id
+    bot.send_message(chat_id, f"📞 **For support, contact us at:** {SUPPORT_EMAIL}", parse_mode='Markdown')
+
+# Run the bot
+bot.polling(none_stop=True)
